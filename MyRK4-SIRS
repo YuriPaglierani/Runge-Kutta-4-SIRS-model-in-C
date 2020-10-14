@@ -1,1 +1,116 @@
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <malloc.h>
+#define NEQ 3
+#define BETA 0.001
+#define MU 0.01
+#define NI 0.3
+#define Tmin 0.0
+#define Tmax 150.0
+#define SANE 600.0
+#define ILL 400.0
+#define NPERS 2000.0
+float Force(float t){													/*Forcing function for time-dependent dynamics*/
+	return 0;
+}
+void f(float t,float xE[],float dxdt[]){								/*SIRS equations (non dying people)*/
+	dxdt[0]=-BETA*xE[0]*xE[1]+MU*(NPERS-xE[0]-xE[1]);
+	dxdt[1]=BETA*xE[0]*xE[1]-NI*xE[1];
+	return;
+}
+void Eulero(float t,float xE[],float dxdt[], float dt){					/*Euler modified for xE*/
+	int i;
+	for (i=0;i<NEQ;i++){
+		xE[i]=xE[i]+dt*dxdt[i];
+	}
+	return;
+}
+void RK4(float t, float *xRK,float dt,void(*Eulero)(float,float*,float*,float),void(*f)(float,float*,float*)){	/*RK4 algorithm*/
+	int i;
+	float *k1,*k2,*k3,*k4,*xRK2;
+	xRK2=(float*)malloc(NEQ*sizeof(float));
+	k1=xRK+NEQ;															/*Support array for lowering errors of integration*/
+	k2=k1+NEQ;
+	k3=k2+NEQ;
+	k4=k3+NEQ;
+	(*f)(t,xRK,k1);
+	for(i=0;i<NEQ;i++){													/*k1, k2, k3, k4 using xRK2 as a support of xRK*/
+		xRK2[i]=xRK[i];
+	}
+	(*Eulero)(t,xRK2,k1,dt/2);
+	(*f)(t+dt/2,xRK2,k2);
+	for(i=0;i<NEQ;i++){
+		xRK2[i]=xRK[i];
+	}
+	(*Eulero)(t,xRK2,k2,dt/2);
+	(*f)(t+dt/2,xRK2,k3);
+	for(i=0;i<NEQ;i++){
+		xRK2[i]=xRK[i];
+	}
+	(*Eulero)(t,xRK2,k3,dt);
+	(*f)(t+dt,xRK2,k4);
+	for (i=0;i<NEQ;i++){												/*update of xRK*/
+		xRK[i]=xRK[i]+dt*((k1[i]/6)+(k2[i])/3+(k3[i])/3+(k4[i]/6));			
+	}
+	free(xRK2);
+	return;
+}
+int main(){
+	int i,nstep;
+	float dt,*xRK,t,Force(float);
+	void Eulero(float,float*,float*,float),RK4(float,float*,float,void(*)(float,float*,float*,float),void(*)(float,float*,float*)),f(float,float*,float*);
+	FILE * saneint;									/*healty(t)*/
+	FILE * illint;									/*ill(t)*/
+	FILE * resint;									/*resistant(t)*/
+	FILE * PSsane;									/*phase state of healthy people*/
+	FILE * PSill;									/*phase state of ill people*/
+	FILE * PSres;									/*phase state of resistant people*/
+	xRK=(float*)malloc(NEQ*5*sizeof(float));		/*vector for the support arrays and the solution of RK4*/
+	saneint=fopen("datisaneint.dat","w");			/*opening files*/
+	illint=fopen("datiillint.dat","w");
+	resint=fopen("datiresint.dat","w");
+	PSsane=fopen("datiPSsane.dat","w");
+	PSill=fopen("datiPSill.dat","w");
+	PSres=fopen("datiPSres.dat","w");
+	if(saneint==NULL || illint==NULL || resint==NULL || PSsane==NULL || PSill==NULL || PSres==NULL){	
+		printf("Errore di apertura di uno dei file");
+	}
+	else if (xRK==NULL){																			
+		printf("Errore di allocazione dell'array delle soluzioni");
+	}
+	else{
+		xRK[0]=SANE;								/*Initial conditions*/
+		xRK[1]=ILL;
+		xRK[2]=NPERS-ILL-SANE;						/*Conservation of total number of people*/
+		printf("Inserisci il delta t: ");			/*integration step*/
+		scanf("%f",&dt);
+		t=Tmin;										/*initial time*/
+		nstep=(Tmax-Tmin)/dt;						/*number of integration steps*/
+		fprintf(saneint,"%f %f\n",t,xRK[0]);		
+		fprintf(illint,"%f %f\n",t,xRK[1]);
+		fprintf(resint,"%f %f\n",t,NPERS-xRK[0]-xRK[1]);
+		fprintf(PSsane,"%f %f\n",xRK[0],-BETA*xRK[0]*xRK[1]+MU*xRK[2]);
+		fprintf(PSill,"%f %f\n",xRK[1],BETA*xRK[0]*xRK[1]-NI*xRK[1]);
+		fprintf(PSres,"%f %f\n",NPERS-xRK[0]-xRK[1],NI*xRK[1]-MU*(NPERS-xRK[0]-xRK[1]));
+		for (i=1;i<=nstep;i++){
+			RK4(t,xRK,dt,Eulero,f);					/*RK4 funtion*/
+			t=Tmin+i*dt;							
+			fprintf(saneint,"%f %f\n",t,xRK[0]);	
+			fprintf(illint,"%f %f\n",t,xRK[1]);
+			fprintf(resint,"%f %f\n",t,NPERS-xRK[0]-xRK[1]);
+			fprintf(PSsane,"%f %f\n",xRK[0],-BETA*xRK[0]*xRK[1]+MU*xRK[2]);
+			fprintf(PSill,"%f %f\n",xRK[1],BETA*xRK[0]*xRK[1]-NI*xRK[1]);
+			fprintf(PSres,"%f %f\n",NPERS-xRK[0]-xRK[1],NI*xRK[1]-MU*(NPERS-xRK[0]-xRK[1]));
+		}
+	}
+	printf("Il punto di equilibrio asintotico è:\n(%f,%f)\nIl punto raggiunto dopo %.1f secondi è:\n(%f,%f)",NI/BETA,MU*(NPERS-NI/BETA)/(MU+NI),Tmax,xRK[0],xRK[1]);
+	free(xRK);									
+	fclose(saneint);								
+	fclose(illint);
+	fclose(resint);
+	fclose(PSsane);
+	fclose(PSill);
+	fclose(PSres);
+	return 0;	
+}
